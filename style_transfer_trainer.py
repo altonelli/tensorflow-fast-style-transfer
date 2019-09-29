@@ -1,9 +1,14 @@
+from utils import Utils
+from google_storage_utils import GCS
+from transform import Transform
+from private_constants import PrivateConstants
+from constants import Constants
+# break for Colab
 import tensorflow as tf
 import numpy as np
 import collections
-import transform
-import utils
-import style_transfer_tester
+import os
+
 
 class StyleTransferTrainer:
     def __init__(self, content_layer_ids, style_layer_ids, content_images, style_image, session, net, num_epochs,
@@ -37,8 +42,8 @@ class StyleTransferTrainer:
         self.save_path = save_path
 
         # image transform network
-        self.transform = transform.Transform()
-        self.tester = transform.Transform('test')
+        self.transform = Transform()
+        self.tester = Transform('test')
 
         # build graph for style transfer
         self._build_graph()
@@ -48,7 +53,7 @@ class StyleTransferTrainer:
             self.TEST = True
 
             # load content image
-            self.test_image = utils.load_image(test_image, max_size=max_size)
+            self.test_image = Utils.load_image(test_image, max_size=max_size)
 
             # build graph
             self.x_test = tf.placeholder(tf.float32, shape=self.test_image.shape, name='test_input')
@@ -228,7 +233,7 @@ class StyleTransferTrainer:
                 step = curr + self.batch_size
                 x_batch = np.zeros(self.batch_shape, dtype=np.float32)
                 for j, img_p in enumerate(self.x_list[curr:step]):
-                    x_batch[j] = utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
+                    x_batch[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
 
                 iterations += 1
 
@@ -246,13 +251,17 @@ class StyleTransferTrainer:
 
                 if step % self.check_period == 0:
                     res = saver.save(self.sess, self.save_path + '/final.ckpt', step)
+                    for suffix in Constants.CKPT_SUFFIXES:
+                        local_path = self.save_path + '/final.ckpt-' + step + suffix
+                        gcs_path = PrivateConstants.MODEL_PATH + '/{}/'.format(Utils.get_formatted_date()) +'/final.ckpt-' + step + suffix
+                        GCS.upload_to_gcs(PrivateConstants.BUCKET_NAME, local_path, gcs_path)
 
                     if self.TEST:
                         output_image = self.sess.run([self.y_hat_test], feed_dict={self.x_test: self.test_image})
                         output_image = np.squeeze(output_image[0])  # remove one dim for batch
                         output_image = np.clip(output_image, 0., 255.)
 
-                        utils.save_image(output_image, self.save_path + '/result_' + "%05d" % step + '.jpg')
+                        Utils.save_image(output_image, self.save_path + '/result_' + "%05d" % step + '.jpg')
             epoch += 1
             iterations = 0
         res = saver.save(self.sess,self.save_path+'/final.ckpt')

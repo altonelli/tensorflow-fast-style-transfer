@@ -1,5 +1,7 @@
+from transform import Transform
+
 import tensorflow as tf
-import transform
+
 
 class StyleTransferTester:
 
@@ -14,7 +16,7 @@ class StyleTransferTester:
         self.model_path = model_path
 
         # image transform network
-        self.transform = transform.Transform()
+        self.transform = Transform()
 
         # build graph for style transfer
         self._build_graph()
