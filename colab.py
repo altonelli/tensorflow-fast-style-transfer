@@ -11,10 +11,16 @@ from private_constants import PrivateConstants
 from utils import Utils
 from constants import Constants
 from style_transfer_trainer import StyleTransferTrainer
+from style_transfer_tester import StyleTransferTester
 from vgg19 import VGG19
 
 import os
 import tensorflow as tf
+import requests
+from io import BytesIO
+import urllib.request
+from skimage import io
+import time
 
 
 def getResources():
@@ -44,6 +50,7 @@ def train():
     vgg_model = '/tmp/pre_trained_model'
     trainDB_path = '/tmp/myDB'
     style = '/tmp/style/udnie.jpg'  # swap with my path
+    style_name = "udnie"
     content_layers_weights = [1.0]
     style_layer_weights = [.2, .2, .2, .2, .2]
     content_layers = ['relu4_2']
@@ -53,11 +60,11 @@ def train():
     content_weight = 7.5e0
     style_weight = 5e2
     tv_weight = 2e2
-    num_epochs = 2
+    num_epochs = 400
     batch_size = 4
     learn_rate = 1e-3
     output = '/tmp/models'
-    checkpoint_every = 1000
+    checkpoint_every = 10
     test = None
     max_size = None
     model_file_path = vgg_model + '/' + Constants.MODEL_FILE_NAME
@@ -93,11 +100,58 @@ def train():
                                    save_path=output,
                                    check_period=checkpoint_every,
                                    test_image=test,
-                                   max_size=max_size)
+                                   max_size=max_size,
+                                   style_name=style_name)
 
     trainer.train()
 
     sess.close()
+
+def test():
+    # load content image
+    max_size = (1125, 2436)
+
+    img_url = "https://www.wonderland-organics.com/wp-content/uploads/2014/05/memorial-glade-berkeley.jpg"
+    dest_path = "/tmp/test/temp.jpg"
+    model_path = "/tmp/models/final.ckpt-140"
+    res_path = "/tmp/test/result.jpg"
+
+    response = requests.get(img_url)
+    BytesIO(response.content)
+
+    if not os.path.exists("/tmp/test/"):
+        os.makedirs("/tmp/test/")
+
+    with urllib.request.urlopen(img_url) as url:
+        with open('/tmp/test/temp.jpg', 'wb') as f:
+            f.write(url.read())
+
+    img = io.imread(dest_path)
+    io.imshow(img)
+    content_image = Utils.load_image(dest_path, max_size=max_size)
+
+    # open session
+    soft_config = tf.ConfigProto(allow_soft_placement=True)
+    soft_config.gpu_options.allow_growth = True # to deal with large image
+    sess = tf.Session(config=soft_config)
+
+    # build the graph
+    transformer = StyleTransferTester(session=sess,
+                                      model_path=model_path,
+                                      content_image=content_image)
+    # execute the graph
+    start_time = time.time()
+    output_image = transformer.test()
+    end_time = time.time()
+
+    # report execution time
+    shape = content_image.shape #(batch, width, height, channel)
+    print('Execution time for a %d x %d image : %f msec' % (shape[0], shape[1], 1000.*float(end_time - start_time)/60))
+    io.imshow(output_image)
+
+    # save result
+    Utils.save_image(output_image, res_path)
+
 
 
 if __name__ == "__main__":

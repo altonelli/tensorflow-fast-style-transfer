@@ -13,7 +13,7 @@ import os
 class StyleTransferTrainer:
     def __init__(self, content_layer_ids, style_layer_ids, content_images, style_image, session, net, num_epochs,
                  batch_size, content_weight, style_weight, tv_weight, learn_rate, save_path, check_period, test_image,
-                 max_size):
+                 max_size, style_name="unknown"):
 
         self.net = net
         self.sess = session
@@ -25,6 +25,7 @@ class StyleTransferTrainer:
         # input images
         self.x_list = content_images
         mod = len(content_images) % batch_size
+        self.style_name = style_name
         self.x_list = self.x_list[:-mod]
         self.y_s0 = style_image
         self.content_size = len(self.x_list)
@@ -252,8 +253,8 @@ class StyleTransferTrainer:
                 if step % self.check_period == 0:
                     res = saver.save(self.sess, self.save_path + '/final.ckpt', step)
                     for suffix in Constants.CKPT_SUFFIXES:
-                        local_path = self.save_path + '/final.ckpt-' + step + suffix
-                        gcs_path = PrivateConstants.MODEL_PATH + '/{}/'.format(Utils.get_formatted_date()) +'/final.ckpt-' + step + suffix
+                        local_path = self.save_path + '/final.ckpt-' + str(int(step)) + suffix
+                        gcs_path = PrivateConstants.MODEL_PATH + '/training/{}/{}'.format(self.style_name, Utils.get_formatted_date()) +'/final.ckpt-' + str(int(step)) + suffix
                         GCS.upload_to_gcs(PrivateConstants.BUCKET_NAME, local_path, gcs_path)
 
                     if self.TEST:

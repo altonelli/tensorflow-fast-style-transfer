@@ -1,6 +1,6 @@
 import tensorflow as tf
 import os
-import utils
+from utils import Utils
 import style_transfer_tester
 import argparse
 import time
@@ -70,7 +70,7 @@ def main():
         exit()
 
     # load content image
-    content_image = utils.load_image(args.content, max_size=args.max_size)
+    content_image = Utils.load_image(args.content, max_size=args.max_size)
 
     # open session
     soft_config = tf.ConfigProto(allow_soft_placement=True)
@@ -88,7 +88,7 @@ def main():
     end_time = time.time()
 
     # save result
-    utils.save_image(output_image, args.output)
+    Utils.save_image(output_image, args.output)
 
     # report execution time
     shape = content_image.shape #(batch, width, height, channel)
