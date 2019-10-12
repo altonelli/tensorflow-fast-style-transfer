@@ -21,8 +21,7 @@ class Transform:
         resid5 = self._residual_block(resid4, 3, name='resid5')
         conv_t1 = self._conv_tranpose_layer(resid5, 64, 3, 2, name='convt1')
         conv_t2 = self._conv_tranpose_layer(conv_t1, 32, 3, 2, name='convt2')
-        conv_t3 = self._conv_tranpose_layer(conv_t2, 3, 9, 1, name='convt3')
-        # conv_t3 = self._conv_layer(conv_t2, 3, 9, 1, relu=False, name='convt3')
+        conv_t3 = self._conv_layer(conv_t2, 3, 9, 1, relu=False, name='convt3')
         preds = (tf.nn.tanh(conv_t3) + 1) * (255. / 2)
         return preds
 

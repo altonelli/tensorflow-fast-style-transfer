@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-import utils
+from utils import Utils
 import vgg19
 import style_transfer_trainer
 import os
@@ -178,10 +178,10 @@ def main():
     vgg_net = vgg19.VGG19(model_file_path)
 
     # get file list for training
-    content_images = utils.get_files(args.trainDB_path)
+    content_images = Utils.get_files(args.trainDB_path)
 
     # load style image
-    style_image = utils.load_image(args.style)
+    style_image = Utils.load_image(args.style)
 
     # create a map for content layers info
     CONTENT_LAYERS = {}

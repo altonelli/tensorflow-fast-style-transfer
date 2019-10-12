@@ -44,11 +44,17 @@ def getResources():
         "/tmp/myDB")
 
 
+def getOriginalDB():
+    if not os.path.exists("/tmp/train2014"):
+        os.makedirs("/tmp/train2014")
+    # !gsutil -m cp gs://{PrivateConstants.BUCKET_NAME}/{PrivateConstants.DATA_PATH}/train2014/ /tmp/train2014
 
-def train():
+
+
+def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=4, check_point_every=100):
     # Training
     vgg_model = '/tmp/pre_trained_model'
-    trainDB_path = '/tmp/myDB'
+    trainDB_path = train_db_path
     style = '/tmp/style/udnie.jpg'  # swap with my path
     style_name = "udnie"
     content_layers_weights = [1.0]
@@ -60,11 +66,11 @@ def train():
     content_weight = 7.5e0
     style_weight = 5e2
     tv_weight = 2e2
-    num_epochs = 400
-    batch_size = 4
+    num_epochs = num_epochs
+    batch_size = batch_size
     learn_rate = 1e-3
     output = '/tmp/models'
-    checkpoint_every = 10
+    checkpoint_every = check_point_every
     test = None
     max_size = None
     model_file_path = vgg_model + '/' + Constants.MODEL_FILE_NAME
