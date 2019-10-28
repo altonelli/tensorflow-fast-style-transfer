@@ -17,6 +17,7 @@ class StyleTransferTrainer:
 
         self.net = net
         self.sess = session
+        self.style_name = style_name
 
         # sort layers info
         self.CONTENT_LAYERS = collections.OrderedDict(sorted(content_layer_ids.items()))
@@ -226,6 +227,9 @@ class StyleTransferTrainer:
         else:
             epoch = 0
             iterations = 0
+
+        print("About to train {}/{} epocs".format(epoch, self.num_epochs))
+        print("{} iter, {} batchsize, {} num examples".format(iterations, self.batch_size, num_examples))
 
         while epoch < self.num_epochs:
             while iterations * self.batch_size < num_examples:

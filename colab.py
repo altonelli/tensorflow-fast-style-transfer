@@ -20,6 +20,8 @@ import requests
 from io import BytesIO
 import urllib.request
 from skimage import io
+from skimage import transform
+import numpy as np
 import time
 
 
@@ -113,35 +115,42 @@ def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=4, check_point_eve
 
     sess.close()
 
-def test():
+
+def test(iteration="23000", \
+         url="https://raw.githubusercontent.com/hwalsuklee/tensorflow-fast-style-transfer/master/content/chicago.jpg", \
+         feed_shape=None):
     # load content image
-    max_size = (1125, 2436)
+    max_size = None
 
-    img_url = "https://www.wonderland-organics.com/wp-content/uploads/2014/05/memorial-glade-berkeley.jpg"
+    tf.reset_default_graph()
+
     dest_path = "/tmp/test/temp.jpg"
-    model_path = "/tmp/models/final.ckpt-140"
+    model_path = "/tmp/models/final.ckpt-" + iteration
     res_path = "/tmp/test/result.jpg"
-
-    response = requests.get(img_url)
-    BytesIO(response.content)
 
     if not os.path.exists("/tmp/test/"):
         os.makedirs("/tmp/test/")
 
-    with urllib.request.urlopen(img_url) as url:
+    with urllib.request.urlopen(url) as url:
         with open('/tmp/test/temp.jpg', 'wb') as f:
             f.write(url.read())
 
     img = io.imread(dest_path)
     io.imshow(img)
-    content_image = Utils.load_image(dest_path, max_size=max_size)
+    content_image = Utils.load_image(dest_path, shape=max_size)
 
     # open session
     soft_config = tf.ConfigProto(allow_soft_placement=True)
-    soft_config.gpu_options.allow_growth = True # to deal with large image
+    soft_config.gpu_options.allow_growth = True  # to deal with large image
     sess = tf.Session(config=soft_config)
 
+    resize_start = time.time()
+    if feed_shape:
+        pre_size = content_image.shape
+        content_image = transform.resize(content_image, feed_shape, preserve_range=True)
+
     # build the graph
+    construction_start = time.time()
     transformer = StyleTransferTester(session=sess,
                                       model_path=model_path,
                                       content_image=content_image)
@@ -149,15 +158,33 @@ def test():
     start_time = time.time()
     output_image = transformer.test()
     end_time = time.time()
-
+    print(f"out max: {output_image.max()}")
+    print(f"out min: {output_image.min()}")
+    print(f"out mean: {output_image.mean()}")
+    print(f"output_shape: {output_image.shape}")
+    print(f"output_type: {type(output_image)}")
     # report execution time
-    shape = content_image.shape #(batch, width, height, channel)
-    print('Execution time for a %d x %d image : %f msec' % (shape[0], shape[1], 1000.*float(end_time - start_time)/60))
-    io.imshow(output_image)
+    shape = content_image.shape  # (batch, width, height, channel)
+    print('Execution time for a %d x %d image : %f msec' % (
+    shape[0], shape[1], 1000. * float(end_time - start_time) / 60))
+    clipped = np.clip(output_image, 0.0, 255.0)
+    print(f"clipped max: {clipped.max()}")
+    print(f"clipped min: {clipped.min()}")
+    print(f"clipped mean: {clipped.mean()}")
+
+    if feed_shape:
+        # res_downsized = downsized # I don't know why I had this there, or if it ran, but it probably would have broken
+        clipped = transform.resize(clipped, pre_size, preserve_range=True)
+
+    resize_end = time.time()
+    print('Total time with resize %f msec' % (
+                1000. * float(resize_end - resize_start - (start_time - construction_start)) / 60))
+    io.imshow(clipped.astype(np.uint8))
 
     # save result
-    Utils.save_image(output_image, res_path)
 
+
+#     Utils.save_image(output_image, res_path)
 
 
 if __name__ == "__main__":

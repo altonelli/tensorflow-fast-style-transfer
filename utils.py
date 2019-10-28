@@ -66,10 +66,14 @@ class Utils:
             size = np.array([size.astype(int), size.astype(int), 3])
             print("image: as type: {}".format(image.shape))
             print("size after: {}, as type: {}".format(size, type(image)))
-            image = transform.resize(image, size)
+            image = transform.resize(image, size, preserve_range=True)
 
         if shape is not None:
-            image = transform.resize(image, size)
+            image = transform.resize(image, size, preserve_range=True)
+        print(image.shape)
+        print(np.mean(image[:, :, 0]))
+        print(np.mean(image[:, :, 1]))
+        print(np.mean(image[:, :, 2]))
 
         return np.float32(image)
 
@@ -108,6 +112,7 @@ class Utils:
 
     # Save an image as a jpeg-file.
     # The image is given as a numpy array with pixel-values between 0 and 255.
+    # TODO: fix image save
     @staticmethod
     def save_image(image, filename):
         # Ensure the pixel-values are between 0 and 255.
