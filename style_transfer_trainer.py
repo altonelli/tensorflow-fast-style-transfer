@@ -13,7 +13,7 @@ import os
 class StyleTransferTrainer:
     def __init__(self, content_layer_ids, style_layer_ids, content_images, style_image, session, net, num_epochs,
                  batch_size, content_weight, style_weight, tv_weight, learn_rate, save_path, check_period, test_image,
-                 max_size, style_name="unknown"):
+                 max_size, style_name="unknown", temporal_weight=0, luminance_weight=0):
 
         self.net = net
         self.sess = session
@@ -36,6 +36,8 @@ class StyleTransferTrainer:
         self.content_weight = content_weight
         self.style_weight = style_weight
         self.tv_weight = tv_weight
+        self.temporal_weight = temporal_weight
+        self.luminance_weight = luminance_weight
         self.learn_rate = learn_rate
         self.batch_size = batch_size
         self.check_period = check_period
@@ -75,18 +77,21 @@ class StyleTransferTrainer:
         self.batch_shape = (self.batch_size,256,256,3)
 
         # graph input
-        self.y_c = tf.placeholder(tf.float32, shape=self.batch_shape, name='content')
+        self.y_first = tf.placeholder(tf.float32, shape=self.batch_shape, name='content_first')
+        self.y_second = tf.placeholder(tf.float32, shape=self.batch_shape, name='content_second')
         self.y_s = tf.placeholder(tf.float32, shape=self.y_s0.shape, name='style')
 
         # preprocess for VGG
-        self.y_c_pre = self.net.preprocess(self.y_c)
+        self.y_first_pre = self.net.preprocess(self.y_first)
+        self.y_second_pre = self.net.preprocess(self.y_first)
         self.y_s_pre = self.net.preprocess(self.y_s)
 
         # get content-layer-feature for content loss
-        content_layers = self.net.feed_forward(self.y_c_pre, scope='content')
+        content_layers_first = self.net.feed_forward(self.y_first_pre, scope='content_first')
+        content_layers_second = self.net.feed_forward(self.y_second_pre, scope='content_second')
         self.Ps = {}
         for id in self.CONTENT_LAYERS:
-            self.Ps[id] = content_layers[id]
+            self.Ps[id] = content_layers_second[id]
 
         # get style-layer-feature for style loss
         style_layers = self.net.feed_forward(self.y_s_pre, scope='style')
@@ -95,12 +100,15 @@ class StyleTransferTrainer:
             self.As[id] = self._gram_matrix(style_layers[id])
 
         # result of image transform net
-        self.x = self.y_c/255.0
-        self.y_hat = self.transform.net(self.x)
-        
+        self.x_first = self.y_first / 255.0
+        self.x_second = self.y_second / 255.0
+        self.y_hat_first = self.transform.net(self.x_first)
+        self.y_hat_second = self.transform.net(self.x_second)
+
         # get layer-values for x
-        self.y_hat_pre = self.net.preprocess(self.y_hat)
-        self.Fs = self.net.feed_forward(self.y_hat_pre, scope='mixed')
+        self.y_hat_first_pre = self.net.preprocess(self.y_hat_first)
+        self.y_hat_second_pre = self.net.preprocess(self.y_hat_second)
+        self.Fs = self.net.feed_forward(self.y_hat_second_pre, scope='mixed')
 
         """ compute loss """
 
@@ -141,7 +149,18 @@ class StyleTransferTrainer:
                 L_style += w * 2 * tf.nn.l2_loss(G - A) / (b * (M ** 2))
 
         # total variation loss
-        L_tv = self._get_total_variation_loss(self.y_hat)
+        L_tv = self._get_total_variation_loss(self.y_hat_second)
+
+        # L_temporal = tf.nn.l2_loss(self.y_hat_second - self.y_hat_first)
+        L_temporal = tf.nn.l2_normalize(self.y_hat_second - self.y_hat_first)
+
+        # Y = 0.2126R + 0.7152G + 0.0722B
+        # TODO check shape because of batching
+        b, h, w, d = self.y_first.get_shape()
+        L_luminance = (((0.2126 * self.y_hat_second[:, :, :, 0] + 0.7152 * self.y_hat_second[:, :, :, 1] + 0.0722 * self.y_hat_second[:, :, :, 2]) - \
+            (0.2126 * self.y_hat_first[:, :, :, 0] + 0.7152 * self.y_hat_first[:, :, :, 1] + 0.0722 * self.y_hat_first[:, :, :, 2])) - \
+            ((0.2126 * self.y_second[:, :, :, 0] + 0.7152 * self.y_second[:, :, :, 1] + 0.0722 * self.y_second[:, :, :, 2]) - \
+            (0.2126 * self.y_first[:, :, :, 0] + 0.7152 * self.y_first[:, :, :, 1] + 0.0722 * self.y_first[:, :, :, 2]))) / (h * w)
 
         """ compute total loss """
 
@@ -149,11 +168,15 @@ class StyleTransferTrainer:
         alpha = self.content_weight
         beta = self.style_weight
         gamma = self.tv_weight
+        gamma_t = self.temporal_weight
+        gamma_l = self.luminance_weight
 
         self.L_content = alpha*L_content
         self.L_style = beta*L_style
         self.L_tv = gamma*L_tv
-        self.L_total = self.L_content + self.L_style + self.L_tv
+        self.L_temporal = gamma_t*L_temporal
+        self.L_luminance = gamma_l*L_luminance
+        self.L_total = self.L_content + self.L_style + self.L_tv + self.L_temporal + self.L_luminance
 
         # add summary for each loss
         tf.summary.scalar('L_content', self.L_content)
@@ -236,17 +259,17 @@ class StyleTransferTrainer:
 
                 curr = iterations * self.batch_size
                 step = curr + self.batch_size
-                x_batch = np.zeros(self.batch_shape, dtype=np.float32)
+                first = np.zeros(self.batch_shape, dtype=np.float32)
                 for j, img_p in enumerate(self.x_list[curr:step]):
-                    x_batch[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
+                    first[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
 
                 iterations += 1
 
-                assert x_batch.shape[0] == self.batch_size
+                assert first.shape[0] == self.batch_size
 
                 _, summary, L_total, L_content, L_style, L_tv, step = self.sess.run(
                     [train_op, merged_summary_op, self.L_total, self.L_content, self.L_style, self.L_tv, global_step],
-                    feed_dict={self.y_c: x_batch, self.y_s: self.y_s0})
+                    feed_dict={self.y_first: first, self.y_s: self.y_s0})
 
                 print('epoch : %d, iter : %4d, ' % (epoch, step),
                       'L_total : %g, L_content : %g, L_style : %g, L_tv : %g' % (L_total, L_content, L_style, L_tv))

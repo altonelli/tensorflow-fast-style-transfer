@@ -53,7 +53,7 @@ def getOriginalDB():
 
 
 
-def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=4, check_point_every=100):
+def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=1, check_point_every=100):
     # Training
     vgg_model = '/tmp/pre_trained_model'
     trainDB_path = train_db_path
