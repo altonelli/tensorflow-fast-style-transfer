@@ -55,9 +55,9 @@ class Utils:
     def load_image(filename, shape=None, max_size=None):
         print(os.path.isfile(filename))
         image = io.imread(filename)
-        print(f"mean color 0: {np.mean(image[:, :, 0])}")
-        print(f"mean color 1: {np.mean(image[:, :, 1])}")
-        print(f"mean color 2: {np.mean(image[:, :, 2])}")
+        print(f"mean color 0 (red): {np.mean(image[:, :, 0])}")
+        print(f"mean color 1 (green): {np.mean(image[:, :, 1])}")
+        print(f"mean color 2 (blue): {np.mean(image[:, :, 2])}")
         if max_size is not None:
             factor = float(max_size) / np.max(image.size)
             size = np.array(image.size) * factor

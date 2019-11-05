@@ -25,7 +25,7 @@ class StyleTransferTrainer:
 
         # input images
         self.x_list = content_images
-        mod = len(content_images) % batch_size
+        mod = len(content_images) % (batch_size + 1)
         self.style_name = style_name
         self.x_list = self.x_list[:-mod]
         self.y_s0 = style_image
@@ -157,7 +157,7 @@ class StyleTransferTrainer:
         # Y = 0.2126R + 0.7152G + 0.0722B
         # TODO check shape because of batching
         b, h, w, d = self.y_first.get_shape()
-        L_luminance = (((0.2126 * self.y_hat_second[:, :, :, 0] + 0.7152 * self.y_hat_second[:, :, :, 1] + 0.0722 * self.y_hat_second[:, :, :, 2]) - \
+        L_luminance = tf.nn.l2_loss(((0.2126 * self.y_hat_second[:, :, :, 0] + 0.7152 * self.y_hat_second[:, :, :, 1] + 0.0722 * self.y_hat_second[:, :, :, 2]) - \
             (0.2126 * self.y_hat_first[:, :, :, 0] + 0.7152 * self.y_hat_first[:, :, :, 1] + 0.0722 * self.y_hat_first[:, :, :, 2])) - \
             ((0.2126 * self.y_second[:, :, :, 0] + 0.7152 * self.y_second[:, :, :, 1] + 0.0722 * self.y_second[:, :, :, 2]) - \
             (0.2126 * self.y_first[:, :, :, 0] + 0.7152 * self.y_first[:, :, :, 1] + 0.0722 * self.y_first[:, :, :, 2]))) / (h * w)
@@ -182,6 +182,8 @@ class StyleTransferTrainer:
         tf.summary.scalar('L_content', self.L_content)
         tf.summary.scalar('L_style', self.L_style)
         tf.summary.scalar('L_tv', self.L_tv)
+        tf.summary.scalar('L_temporal', self.L_temporal)
+        tf.summary.scalar('L_luminance', self.L_luminance)
         tf.summary.scalar('L_total', self.L_total)
 
     # borrowed from https://github.com/lengstrom/fast-style-transfer/blob/master/src/optimize.py
@@ -260,7 +262,11 @@ class StyleTransferTrainer:
                 curr = iterations * self.batch_size
                 step = curr + self.batch_size
                 first = np.zeros(self.batch_shape, dtype=np.float32)
+                second = np.zeros(self.batch_shape, dtype=np.float32)
                 for j, img_p in enumerate(self.x_list[curr:step]):
+                    first[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
+
+                for j, img_p in enumerate(self.x_list[curr+1:step+1]):
                     first[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
 
                 iterations += 1
@@ -269,7 +275,7 @@ class StyleTransferTrainer:
 
                 _, summary, L_total, L_content, L_style, L_tv, step = self.sess.run(
                     [train_op, merged_summary_op, self.L_total, self.L_content, self.L_style, self.L_tv, global_step],
-                    feed_dict={self.y_first: first, self.y_s: self.y_s0})
+                    feed_dict={self.y_first: first, self.y_second: second, self.y_s: self.y_s0})
 
                 print('epoch : %d, iter : %4d, ' % (epoch, step),
                       'L_total : %g, L_content : %g, L_style : %g, L_tv : %g' % (L_total, L_content, L_style, L_tv))

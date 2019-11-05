@@ -68,6 +68,8 @@ def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=1, check_point_eve
     content_weight = 7.5e0
     style_weight = 5e2
     tv_weight = 2e2
+    temporal_weight = 2e2
+    luminance_weight = 2e2
     num_epochs = num_epochs
     batch_size = batch_size
     learn_rate = 1e-3
@@ -109,7 +111,9 @@ def train(train_db_path="/tmp/myDB", num_epochs=2, batch_size=1, check_point_eve
                                    check_period=checkpoint_every,
                                    test_image=test,
                                    max_size=max_size,
-                                   style_name=style_name)
+                                   style_name=style_name,
+                                   temporal_weight=temporal_weight,
+                                   luminance_weight=luminance_weight)
 
     trainer.train()
 
