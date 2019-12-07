@@ -83,7 +83,7 @@ class StyleTransferTrainer:
 
         # preprocess for VGG
         self.y_first_pre = self.net.preprocess(self.y_first)
-        self.y_second_pre = self.net.preprocess(self.y_first)
+        self.y_second_pre = self.net.preprocess(self.y_second)
         self.y_s_pre = self.net.preprocess(self.y_s)
 
         # get content-layer-feature for content loss
@@ -102,8 +102,8 @@ class StyleTransferTrainer:
         # result of image transform net
         self.x_first = self.y_first / 255.0
         self.x_second = self.y_second / 255.0
-        self.y_hat_first = self.transform.net(self.x_first)
-        self.y_hat_second = self.transform.net(self.x_second)
+        self.y_hat_first = self.transform.net(self.x_first, reuse=False)
+        self.y_hat_second = self.transform.net(self.x_second, reuse=True)
 
         # get layer-values for x
         self.y_hat_first_pre = self.net.preprocess(self.y_hat_first)
@@ -157,10 +157,7 @@ class StyleTransferTrainer:
         # Y = 0.2126R + 0.7152G + 0.0722B
         # TODO check shape because of batching
         b, h, w, d = self.y_first.get_shape()
-        L_luminance = tf.nn.l2_loss(((0.2126 * self.y_hat_second[:, :, :, 0] + 0.7152 * self.y_hat_second[:, :, :, 1] + 0.0722 * self.y_hat_second[:, :, :, 2]) - \
-            (0.2126 * self.y_hat_first[:, :, :, 0] + 0.7152 * self.y_hat_first[:, :, :, 1] + 0.0722 * self.y_hat_first[:, :, :, 2])) - \
-            ((0.2126 * self.y_second[:, :, :, 0] + 0.7152 * self.y_second[:, :, :, 1] + 0.0722 * self.y_second[:, :, :, 2]) - \
-            (0.2126 * self.y_first[:, :, :, 0] + 0.7152 * self.y_first[:, :, :, 1] + 0.0722 * self.y_first[:, :, :, 2]))) / (h * w)
+        L_luminance = self._get_Luminance_loss(h, w)
 
         """ compute total loss """
 
@@ -185,6 +182,22 @@ class StyleTransferTrainer:
         tf.summary.scalar('L_temporal', self.L_temporal)
         tf.summary.scalar('L_luminance', self.L_luminance)
         tf.summary.scalar('L_total', self.L_total)
+
+    def _get_Luminance_loss(self, h, w):
+        lum_transformed_t1 = 0.2126 * self.y_hat_second[:, :, :, 0] + \
+                 0.7152 * self.y_hat_second[:, :, :, 1] + \
+                 0.0722 * self.y_hat_second[:, :, :, 2]
+        lum_transformed_t0 = 0.2126 * self.y_hat_first[:, :, :, 0] + \
+                 0.7152 * self.y_hat_first[:, :, :, 1] + \
+                 0.0722 * self.y_hat_first[:, :, :, 2]
+        lum_original_t1 = 0.2126 * self.y_second[:, :, :, 0] + \
+                          0.7152 * self.y_second[:, :, :, 1] + \
+                          0.0722 * self.y_second[:, :, :, 2]
+        lum_original_t0 = 0.2126 * self.y_first[:, :, :, 0] + \
+                          0.7152 * self.y_first[:, :, :, 1] + \
+                          0.0722 * self.y_first[:, :, :, 2]
+        return tf.nn.l2_loss((lum_transformed_t1 - lum_transformed_t0) - (lum_original_t1 - lum_original_t0)) \
+               / tf.float32(h * w)
 
     # borrowed from https://github.com/lengstrom/fast-style-transfer/blob/master/src/optimize.py
     def _get_total_variation_loss(self, img):
@@ -267,18 +280,20 @@ class StyleTransferTrainer:
                     first[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
 
                 for j, img_p in enumerate(self.x_list[curr+1:step+1]):
-                    first[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
+                    second[j] = Utils.get_img(img_p, (256, 256, 3)).astype(np.float32)
 
                 iterations += 1
 
                 assert first.shape[0] == self.batch_size
 
-                _, summary, L_total, L_content, L_style, L_tv, step = self.sess.run(
-                    [train_op, merged_summary_op, self.L_total, self.L_content, self.L_style, self.L_tv, global_step],
+                _, summary, L_total, L_content, L_style, L_tv, L_luminance, L_temporal, step = self.sess.run(
+                    [train_op, merged_summary_op, self.L_total, self.L_content, self.L_style,
+                     self.L_tv, self.L_luminance, self.L_temporal,  global_step],
                     feed_dict={self.y_first: first, self.y_second: second, self.y_s: self.y_s0})
 
                 print('epoch : %d, iter : %4d, ' % (epoch, step),
-                      'L_total : %g, L_content : %g, L_style : %g, L_tv : %g' % (L_total, L_content, L_style, L_tv))
+                      'L_total : %g, L_content : %g, L_style : %g, L_tv : %g, L_luminance : %g, L_temporal : %g' %
+                      (L_total, L_content, L_style, L_tv, L_luminance, L_temporal))
 
                 # write logs at every iteration
                 summary_writer.add_summary(summary, iterations)

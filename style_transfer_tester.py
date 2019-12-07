@@ -5,12 +5,13 @@ import tensorflow as tf
 
 class StyleTransferTester:
 
-    def __init__(self, session, content_image, model_path):
+    def __init__(self, session, content_images, model_path):
         # session
         self.sess = session
 
         # input images
-        self.x0 = content_image
+        self.frames = content_images
+        # self.x0 = content_images
 
         # input model
         self.model_path = model_path
@@ -42,7 +43,10 @@ class StyleTransferTester:
         saver.restore(self.sess, self.model_path)
 
         # get transformed image
-        output = self.sess.run(self.y_hat, feed_dict={self.x: self.x0})
+        output_frames = []
+        for idx in range(len(self.frames) - 1):
+            output = self.sess.run(self.y_hat, feed_dict={self.x: self.x0})
+            output_frames.append(output)
 
         return output
 

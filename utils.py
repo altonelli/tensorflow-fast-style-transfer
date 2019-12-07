@@ -17,7 +17,7 @@ class Utils:
         if not (len(img.shape) == 3 and img.shape[2] == 3):
             img = np.dstack((img, img, img))
         if img_size != False:
-            img = transform.resize(img, img_size)
+            img = transform.resize(img, img_size, preserve_range=True)
         return img
 
     @staticmethod
